@@ -29,7 +29,25 @@ def extract_labels_img(image_path: str) -> list[str]:
             etiquetes = dades.split(";")
     return etiquetes
 
-
+def save_labels_img(image_path: str, labels: list[str]) -> None:
+    print("Guardant imatge")
+    try:
+        # Open the image
+        with pyexiv2.Image(image_path) as img:
+            # Read existing EXIF metadata
+            exif_data = img.read_exif()
+            
+            # Set new keywords
+            exif_data['Exif.Image.XPKeywords'] = ";".join(labels)
+            
+            # Write the modified metadata back to the image
+            img.modify_exif(exif_data)
+            
+            print(f"Successfully updated labels for {image_path}")
+            print(f"New labels: {labels}")
+            
+    except Exception as e:
+        print(f"Error: {e}")
 
 class ListboxEtiquetes:
     def __init__(self, parent, options):
@@ -37,9 +55,8 @@ class ListboxEtiquetes:
         options: List of tuples in format (display_label, value)
         """
         self.parent = parent
-        self.options = options.copy()
+        self.tags = set(options)
         self.selected_value = tk.StringVar()
-        self.selected_display = tk.StringVar()
         
         self.setup_ui()
     
@@ -56,7 +73,7 @@ class ListboxEtiquetes:
         # Create listbox
         self.listbox = tk.Listbox(self.list_frame, height=12, exportselection=False)
         self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
+         
         # Create scrollbar
         self.scrollbar = ttk.Scrollbar(self.list_frame, orient=tk.VERTICAL, command=self.listbox.yview)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -67,36 +84,48 @@ class ListboxEtiquetes:
         self.listbox.bind('<Double-Button-1>', self.on_listbox_double_click)
         
         # Populate listbox with all options initially
-        self.update_listbox([opt for opt in self.options])
+        self.update_listbox(self.tags)
         
         # Selected item display
         self.selected_frame = ttk.Frame(self.main_frame)
         self.selected_frame.pack(fill=tk.X, pady=(10, 5))
         
         ttk.Label(self.selected_frame, text="Selected:").pack(side=tk.LEFT)
-        self.selected_label = ttk.Label(self.selected_frame, textvariable=self.selected_display, 
+        self.selected_label = ttk.Label(self.selected_frame, textvariable=self.selected_value, 
                                        foreground="blue", font=('Arial', 10, 'bold'))
         self.selected_label.pack(side=tk.LEFT, padx=(5, 0))
     
-    def change_labels(self, options):
-        self.options = options.copy()
+    def load_labels(self, dir_img: str):
+        tags = extract_labels_img(dir_img)
+        self.tags = set(tags)
         self.clear_selection()
+
+    def save_labels(self, dir_img: str):
+        print(self.tags)
+        save_labels_img(dir_img, list(self.tags))
 
     def update_listbox(self, items):
         self.listbox.delete(0, tk.END)
         for item in items:
             self.listbox.insert(tk.END, item)
     
+    def add_tag(self, tag: str):
+        self.tags.add(tag)
+        self.update_listbox(self.tags)
+
+    def add_tags(self, tags):
+        self.tags.update(set(tags))
+        self.update_listbox(self.tags)
     
     def on_listbox_select(self, event):
         """Handle selection from the listbox"""
         if self.listbox.curselection():
             index = self.listbox.curselection()[0]
             display_text = self.listbox.get(index)
-            self.selected_display.set(display_text)
+            self.selected_value.set(display_text)
             
             # Find and store the corresponding value
-            for opt in self.options:
+            for opt in self.tags:
                 if opt == display_text:
                     self.selected_value.set(opt)
                     break
@@ -109,13 +138,9 @@ class ListboxEtiquetes:
         """Get the underlying value of the selected option"""
         return self.selected_value.get()
     
-    def get_selected_display(self):
-        """Get the display text of the selected option"""
-        return self.selected_display.get()
     
     def clear_selection(self):
         """Clear the current selection"""
         self.listbox.selection_clear(0, tk.END)
-        self.selected_display.set("")
         self.selected_value.set("")
-        self.update_listbox([opt for opt in self.options])
+        self.update_listbox(self.tags)

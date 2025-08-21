@@ -1,16 +1,27 @@
 import tkinter as tk
 from tkinter import ttk
+import json
+import sys
+import os
+
+def get_executable_dir():
+    """Get the directory where the executable is located"""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        return os.path.dirname(sys.executable)
+    else:
+        # Running as Python script
+        return os.path.dirname(os.path.abspath(__file__))
 
 class SearchableListbox:
-    def __init__(self, parent, options):
+    def __init__(self, parent, options, json="Etiquetas.json"):
         """
         options: List of tuples in format (display_label, value)
         """
         self.parent = parent
-        self.options = options.copy()
+        self.options: set[str] = set(options)
         self.selected_value = tk.StringVar()
-        self.selected_display = tk.StringVar()
-        
+        self.json_path = json
         self.setup_ui()
     
     def setup_ui(self):
@@ -23,7 +34,7 @@ class SearchableListbox:
         self.search_var = tk.StringVar()
         self.search_entry = ttk.Entry(self.main_frame, textvariable=self.search_var)
         self.search_entry.pack(fill=tk.X, pady=(0, 5))
-        self.search_entry.bind('<KeyRelease>', self.filter_options)
+        self.search_entry.bind('<KeyRelease>', self.gestio_tecles)
         
         # Create frame for listbox and scrollbar
         self.list_frame = ttk.Frame(self.main_frame)
@@ -40,22 +51,44 @@ class SearchableListbox:
         
         # Bind listbox selection event
         self.listbox.bind('<<ListboxSelect>>', self.on_listbox_select)
-        self.listbox.bind('<Double-Button-1>', self.on_listbox_double_click)
         
         # Populate listbox with all options initially
-        self.update_listbox([opt for opt in self.options])
+        self.update_listbox(self.options)
         
         # Selected item display
         self.selected_frame = ttk.Frame(self.main_frame)
         self.selected_frame.pack(fill=tk.X, pady=(10, 5))
         
         ttk.Label(self.selected_frame, text="Selected:").pack(side=tk.LEFT)
-        self.selected_label = ttk.Label(self.selected_frame, textvariable=self.selected_display, 
+        self.selected_label = ttk.Label(self.selected_frame, textvariable=self.selected_value, 
                                        foreground="blue", font=('Arial', 10, 'bold'))
         self.selected_label.pack(side=tk.LEFT, padx=(5, 0))
     
+    def add_new_tag(self):
+        new_tag = self.search_var.get()
+        self.options.add(new_tag)
+        self.filter_options()
+        self.save_tags()
+        return new_tag
+
+    def save_tags(self):
+        with open(self.json_path, "w") as f:
+            json.dump(list(self.options), f)
+
+    def load_tags(self):
+        try:
+            if os.path.exists(self.json_path):
+                with open(self.json_path, "r") as f:
+                    data = json.load(f)
+                    self.change_labels(data)
+            return True
+        except Exception as e:
+            print(f"Error loading labels: {str(e)}")
+            return False
+
     def change_labels(self, options):
-        self.options = options.copy()
+        self.options = set(options)
+        self.update_listbox(self.options)
         self.clear_selection()
 
     def update_listbox(self, items):
@@ -63,18 +96,20 @@ class SearchableListbox:
         for item in items:
             self.listbox.insert(tk.END, item)
     
-    def filter_options(self, event):
-        """Filter options based on user input - only show items that start with the input"""
-        # Ignore navigation keys
-        if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Shift_L', 'Shift_R', 
+    def gestio_tecles(self, event):
+        if event.keysym not in ('Up', 'Down', 'Left', 'Right', 'Shift_L', 'Shift_R', 
                            'Control_L', 'Control_R', 'Alt_L', 'Alt_R'):
-            return
+            self.clear_selection()
+            self.filter_options()
+
+    def filter_options(self):
+        """Filter options based on user input - only show items that start with the input"""
         
         typed = self.search_var.get().lower()
         
         if typed == '':
             # Show all options if search field is empty
-            filtered = [opt for opt in self.options]
+            filtered = self.options
         else:
             # Filter options that start with the typed text (case insensitive)
             filtered = [
@@ -90,7 +125,7 @@ class SearchableListbox:
         if self.listbox.curselection():
             index = self.listbox.curselection()[0]
             display_text = self.listbox.get(index)
-            self.selected_display.set(display_text)
+            self.selected_value.set(display_text)
             
             # Find and store the corresponding value
             for opt in self.options:
@@ -98,25 +133,22 @@ class SearchableListbox:
                     self.selected_value.set(opt)
                     break
     
-    def on_listbox_double_click(self, event):
-        """Handle double-click selection"""
-        self.on_listbox_select(event)
     
     def get_selected_value(self):
         """Get the underlying value of the selected option"""
         return self.selected_value.get()
-    
-    def get_selected_display(self):
-        """Get the display text of the selected option"""
-        return self.selected_display.get()
-    
-    def clear_selection(self):
-        """Clear the current selection"""
-        self.listbox.selection_clear(0, tk.END)
-        self.selected_display.set("")
-        self.selected_value.set("")
+
+    def clear_search(self):
         self.search_var.set("")
-        self.update_listbox([opt for opt in self.options])
+
+    def clear_selection(self, event=None):
+        self.listbox.selection_clear(0, tk.END)
+        self.selected_value.set("")
+
+    def exportar_etiquetes(self):
+        print(get_executable_dir()+ r"\EtiquetasCopia.json")
+        with open(get_executable_dir()+ r"\EtiquetasCopia.json", 'w', encoding='utf-8') as json_file:
+            json.dump(list(self.options), json_file, indent=4, ensure_ascii=False)
 
 
 comida = ["Apple", "Banana", "Blueberry", "Blackberry", "Cherry", "Coconut", "Grape", 
@@ -143,10 +175,9 @@ if __name__ == "__main__":
     
     # Button to show selected value
     def show_selection():
-        selected_display = searchable_list.get_selected_display()
         selected_value = searchable_list.get_selected_value()
-        if selected_display:
-            print(f"Selected: {selected_display} (Value: {selected_value})")
+        if selected_value:
+            print(f"Selected: {selected_value} (Value: {selected_value})")
         else:
             print("No selection made")
     

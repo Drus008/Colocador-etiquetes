@@ -1,0 +1,8 @@
+Es pot guardar sense haver obert cap carpeta.
+Si tires enrrere no es guarda
+
+
+
+Estaria bé fer que es pugés importar etiquetes
+Això en el cas de que es pugi exportar
+Boto per a eliminar etiqueta. Si tequivoques no es pot desfer
